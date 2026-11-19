@@ -8,6 +8,7 @@ import argparse
 from functools import lru_cache
 import json
 from pathlib import Path
+from time import perf_counter
 
 import faiss
 import numpy as np
@@ -29,7 +30,7 @@ class SemanticRetriever:
     """
 
     def __init__(self, corpus_path=CORPUS_PATH, model_name=MODEL_NAME,
-                 cache_folder=MODEL_CACHE, local_files_only=False, model=None):
+                 cache_folder=MODEL_CACHE, local_files_only=False, model=None, revision=None):
         self.passages = read_jsonl(corpus_path)
         if not self.passages:
             raise ValueError("The retrieval corpus is empty.")
@@ -47,13 +48,23 @@ class SemanticRetriever:
         # Conservative CPU limits avoid native threading crashes seen on this Mac.
         torch.set_num_threads(1)
         faiss.omp_set_num_threads(1)
+        started = perf_counter()
         self.model = model if model is not None else SentenceTransformer(
             model_name, cache_folder=str(cache_folder), device="cpu",
-            local_files_only=local_files_only,
+            local_files_only=local_files_only, revision=revision,
         )
+        model_loading_ms = (perf_counter() - started) * 1000
+        started = perf_counter()
         embeddings = self._encode(texts)
+        embedding_ms = (perf_counter() - started) * 1000
+        started = perf_counter()
         self.index = faiss.IndexFlatIP(embeddings.shape[1])
         self.index.add(embeddings)
+        self.setup_timings_ms = {
+            "model_loading": model_loading_ms,
+            "corpus_embedding": embedding_ms,
+            "index_construction": (perf_counter() - started) * 1000,
+        }
         if self.index.ntotal != len(self.passage_ids):
             raise ValueError("FAISS index and passage IDs are misaligned.")
 

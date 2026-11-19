@@ -25,6 +25,14 @@ def hit_at_k(results, relevant_passage_id, k):
     return int(any(result["passage_id"] == relevant_passage_id for result in results[:k]))
 
 
+def reciprocal_rank_at_k(results, relevant_passage_id, k=10):
+    """Reciprocal of the annotated passage's rank, or zero if absent in top K."""
+    if type(k) is not int or k < 1:
+        raise ValueError("K must be a positive integer.")
+    return next((1.0 / rank for rank, result in enumerate(results[:k], start=1)
+                 if result["passage_id"] == relevant_passage_id), 0.0)
+
+
 def evaluate_retrieval(questions, retrieve, ks=DEFAULT_KS):
     """Evaluate any compatible retrieval callable, retrieving max(K) only once per question."""
     ks = tuple(ks)
